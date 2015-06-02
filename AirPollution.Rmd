@@ -1,0 +1,117 @@
+Gardiner Harris, who is a South Asia correspondent of the New York Times, shared a personal story of his son's breathing troubles in New Delhi, India, in a recent dispatch titled [Holding Yor Breath in India.](http://nyti.ms/1eCRKBQ ) In this post, I use data from the [World Health Organization's Website](http://www.who.int/phe/health_topics/outdoorair/databases/cities/en/) to identify and map cities where the air quality is worse than the acceptable levels, measured by the annual mean concentration of particulate matter (PM10 and PM2.5). A link to this was provided in the New York Times article. I use many packages from the R-Studio, Ramnath Vaidyanathan and Kenton Russel team, among others, in this process. The code for this entire post can be found on [GitHub at http://github.com/patilv/Airpollution.](http://github.com/patilv/Airpollution)
+
+More information on what PM10 and PM2.5 and how they pollute air can be found on [this website.](http://www.airinfonow.org/html/ed_particulate.html) The direct link to the excel version of [WHO's dataset that I use is here.](http://www.who.int/entity/phe/health_topics/outdoorair/databases/OAP_database.xls?ua=1) The dataset for PM10 has data from 1099 cities belonging to 91 countries, but the PM2.5 data were measured from 
+only 586 cities from 38 countries. As a result, there are many cities and countries that are present in the PM10 top 100 that are absent from the PM2.5 data. Other caveats are based on the process by which these measures were taken by the WHO and the inconsistency in the years for which these measures were taken. Please see the WHO website and data for more details.
+
+# PM10: Data Retrieval and Processing
+
+```{r eval=FALSE}
+library(ggmap)
+library(readxl)
+library(leaflet)
+library(DT)
+library(htmlwidgets)
+library(pipeR)
+library(rcdimple)
+library(gsubfn)
+
+# PM10 and PM2.5 data are available in sheets 4 and 2, respectively, of the excel file.
+# Let's deal with just the PM10 data first.
+cities=read_excel("OAP_database.xlsx", sheet = 4)
+cities=cities[-c(1:2),c(3,2,4)] #Some elimination of rows and retention of only 3 columns
+names(cities)=c("City","Country","PMLevel") # Renaming 3 columns
+```
+
+# Interpreting PM10 levels
+
+According to cautionary statements on [http://www.airinfonow.org/html/ed_particulate.html](http://www.airinfonow.org/html/ed_particulate.html), PM10 levels up to 150 micrograms per cubic meter (averaged over 24 hours) indicate that the Air Quality Index has  values of up to 100, which should normally not result in health concerns. 
+
+
+# PM10: Cities with PM10 levels at 150 or higher micrograms per cubic meter
+
+```{r eval=FALSE}
+cities$PMLevel=round(as.numeric(cities$PMLevel),2)
+#cities=cities[order(-cities$PMLevel),][1:100,]
+cities=cities[cities$PMLevel>=150,]
+PM10table=datatable(cities,rownames=FALSE)
+saveWidget(PM10table,"PM10table.html",selfcontained = TRUE)
+```
+<iframe width="100%" height="500" src="PM10table.html" frameborder="0"> </iframe>
+
+There are 25 cities that have PM10 levels at or above 150.
+
+# Which countries contribute the highest number of cities in the top 100 on PM10? 
+
+```{r eval=FALSE}
+countriespm10=as.data.frame(table(cities$Country))
+names(countriespm10)=c("Country","Number of Cities")
+```
+
+There are 8 countries that these 25 cities belong to.
+
+```{r eval=FALSE}
+countriespm10%>>%dimple( x="Country", y= "Number of Cities", type = "bar") %>>%
+  yAxis( orderRule="Country") %>>%
+  add_title( "Number of Top 100 PM10 Cities in a Country") %>>%
+  set_bounds( x="10%", y="1%", width="60%",height="60%") %>>%
+saveWidget(file="top25pm10country.html",selfcontained=TRUE)
+```
+<iframe width="100%" height="500" src="top25pm10country.html" frameborder="0"> </iframe>
+
+
+# Geographic Map of 25 Cities with highest levels of PM10
+
+```{r eval=F}
+cities$CityCountry=paste(cities$City,cities$Country,sep=", ")  
+
+# combining the city and country can help with the geocoding of the city, which we do next.
+locs=geocode(as.character(cities$CityCountry)) 
+# Results for 3 Iranian cities were not returned - Khoramabad, Yasouj, and Uromiyeh. Manual google-maps search.
+
+locs[11,]=c(48.3590698,33.4911172)# Khoramabad 
+locs[14,]=c(45.0566701,37.5518949)# Uromiah
+locs[15,]=c(51.5664735,30.6867144) # Yasouj,
+
+cities$lat=locs$lat
+cities$lon=locs$lon
+save(cities,file="cities.Rda")
+```
+
+## The Map - Sizing of city markers based on PM10 Levels
+
+```{r eval=FALSE}
+cities$popup=paste("<table><tr><td>City:", cities$City,"<br>Country:",cities$Country, "<br>Annual Mean PM10 Level:", cities$PMLevel,"</td></tr></table>")
+
+topcitiespm10=leaflet(cities)%>%
+  addProviderTiles("CartoDB.Positron") %>%
+     setView(0, 0, zoom = 2) %>%
+  addCircles(stroke=FALSE, fillOpacity = .5, color="red", radius=~PMLevel*1000,popup=~popup)
+saveWidget(topcitiespm10,"topcitiespm10map.html", selfcontained = TRUE)
+```
+<iframe width="100%" height="500" src="topcitiespm10map.html" frameborder="0"> </iframe>
+
+
+# PM2.5 Measures: Cities and Countries
+
+```{r eval=FALSE}
+
+cities2point5=read_excel("OAP_database.xlsx", sheet = 2)
+cities2point5=cities2point5[-c(1:2),c(3,2,4)] #Some elimination of rows and retention of only 3 columns
+names(cities2point5)=c("City","Country","PMLevel") # Renaming 3 columns
+```
+
+# Interpreting PM2.5 levels
+
+According to cautionary statements on [http://www.airinfonow.org/html/ed_particulate.html](http://www.airinfonow.org/html/ed_particulate.html), PM2.5 levels up to 40 micrograms per cubic meter (averaged over 24 hours) indicate that the Air Quality Index has  values of up to 100, which should normally not result in health concerns. 
+
+# Cities with PM2.5 at or above 40.
+
+```{r eval=FALSE}
+cities2point5$PMLevel=round(as.numeric(cities2point5$PMLevel),2)
+cities2point5=cities2point5[cities2point5$PMLevel>=40,]
+PM2point5table=datatable(cities2point5[1:4,],rownames=FALSE) #There were 4 cities, the rest were empty rows.
+saveWidget(PM2point5table,"PM2point5table.html",selfcontained = TRUE)
+```
+<iframe width="100%" height="300" src="PM2point5table.html" frameborder="0"> </iframe>
+
+In the data available, only 4 cities have a value of PM2.5 level greater than 40 (annual mean micrograms per cubic meter). One of them is Zabrze, Poland, which has a value of 40.44, which I count in this list based on that cut-off value of 40.) The rest have acceptable values of PM2.5 levels. As was previously mentioned, there is an issue with the data available. The dataset for PM10 has data from 1099 cities belonging to 91 countries, but the PM2.5 data were measured from only 586 cities from 38 countries. 
